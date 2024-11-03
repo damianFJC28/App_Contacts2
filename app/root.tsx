@@ -1,4 +1,5 @@
-import type { LinksFunction } from "@remix-run/node";
+import type { LinksFunction,LoaderFunctionArgs } from "@remix-run/node";
+import { useEffect } from "react";
 import { json, redirect } from "@remix-run/node"
 import {
   Form,
@@ -8,10 +9,14 @@ import {
   Scripts,
   ScrollRestoration,
   Outlet,
-  useLoaderData
+  useLoaderData,
+  useNavigation,
+  useSubmit
 } from "@remix-run/react";
  import appStylesHref from "./app.css?url";
  import { createEmptyContact, getContacts } from "./data";
+//import { useEffect } from "react";
+ 
 
   export const links: LinksFunction = () => [
   { rel: "stylesheet", href: appStylesHref}
@@ -22,14 +27,28 @@ import {
     return redirect(`/contacts/${contact.id}/edit`);
     }
 
-  export const loader = async () => {
-    const contacts = await getContacts();
-    return json({ contacts })
+  export const loader = async ({request}:LoaderFunctionArgs) => {
+    const url=new URL(request.url);
+    const q=url.searchParams.get("q");
+    const contacts = await getContacts(q);
+    return json({ contacts,q })
     }
 
     
 export default function App() {
-  const { contacts } = useLoaderData<typeof loader>();
+  const { contacts,q } = useLoaderData<typeof loader>();
+  const navigation=useNavigation();
+  const submit=useSubmit();
+  const searching=navigation.location &&
+    new URLSearchParams(navigation.location.search).has("q")
+
+  useEffect(()=>{
+    const searchField=document.getElementById("q");
+    if(searchField instanceof HTMLInputElement){
+      searchField.value=q || "";
+    }
+  },[q])
+  
   return (
     <html lang="en">
       <head>
@@ -42,15 +61,21 @@ export default function App() {
         <div id="sidebar">
           <h1>Remix Contacts</h1>
           <div>
-            <Form id="search-form" role="search">
+            <Form 
+              onChange={(event)=>submit(event.currentTarget)}
+              id="search-form" 
+              role="search"
+            >
               <input
                 id="q"
+                defaultValue={q || ""}
+                className={searching ? "loading": "" }
                 aria-label="Search contacts"
                 placeholder="Search"
                 type="search"
                 name="q"
               />
-              <div id="search-spinner" aria-hidden hidden={true} />
+              <div id="search-spinner" aria-hidden hidden={!searching} />
             </Form>
             <Form method="post">
               <button type="submit">New</button>
@@ -63,17 +88,14 @@ export default function App() {
                   <li key={contact.id}>
                     <NavLink
                     className={ ({isActive, isPending}) =>
-
                       isActive 
                       ? "active" 
                       : isPending 
                       ? "pending" 
                       : ""
                     }
-                    
-                    
-                    to={`contacts/${contact.id}`}>
-                      {contact.first || contact.last ? (
+                      to={`contacts/${contact.id}`}>
+                    {contact.first || contact.last ? (
                         <>
                           {contact.first} {contact.last}
                         </>
@@ -96,7 +118,12 @@ export default function App() {
         
         </div>
 
-        <div id="detail">
+        <div
+          className={
+            navigation.state==="loading"?"loading":""
+          }
+        
+        id="detail">
           <Outlet/>
         </div>
 
